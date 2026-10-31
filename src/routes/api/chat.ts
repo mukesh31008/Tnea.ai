@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createAiProvider } from "@/lib/ai-gateway.server";
 import { streamText, convertToModelMessages, type UIMessage } from "ai";
 
 const SYSTEM = `You are the TNEA.ai Counselling Assistant. You help Tamil Nadu Engineering Admissions (TNEA) aspirants with:
@@ -18,18 +18,21 @@ export const Route = createFileRoute("/api/chat")({
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as ChatBody;
-        const key = process.env.LOVABLE_API_KEY;
-        if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const key = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
+        if (!key) {
+          return new Response("Missing OPENAI_API_KEY or AI_API_KEY", { status: 500 });
+        }
 
-        const gateway = createLovableAiGatewayProvider(key);
+        const ai = createAiProvider(key);
         const uiMessages: UIMessage[] = body.messages.map((m, i) => ({
           id: String(i),
           role: m.role,
           parts: [{ type: "text", text: m.content }],
         })) as UIMessage[];
 
+        const modelName = process.env.AI_MODEL || "gpt-4o-mini";
         const result = streamText({
-          model: gateway("openai/gpt-5.5"),
+          model: ai(modelName),
           system: SYSTEM,
           messages: await convertToModelMessages(uiMessages),
         });

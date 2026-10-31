@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, lazy, Suspense } from "react";
+import { useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -17,9 +17,6 @@ import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "motion/react";
 import { AnimatedSection } from "@/components/animated-section";
 import { EngineeringBg, CoordinateMarker, EngineeringDivider } from "@/components/engineering-bg";
-
-// Lazy load the easter egg
-const EasterEgg = lazy(() => import("@/components/easter-egg"));
 
 export const Route = createFileRoute("/counselling")({
   head: () => ({
@@ -59,7 +56,6 @@ function Counselling() {
 
   const [recos, setRecos] = useState<Reco[] | null>(null);
   const [inputMode, setInputMode] = useState<"rank" | "cutoff">("rank");
-  const [showEasterEgg, setShowEasterEgg] = useState(false);
 
   const { mutate: generate, isPending: loading } = useMutation({
     mutationFn: async () => {
@@ -148,12 +144,6 @@ function Counselling() {
 
   return (
     <AppShell>
-      {showEasterEgg && (
-        <Suspense fallback={null}>
-          <EasterEgg onClose={() => setShowEasterEgg(false)} />
-        </Suspense>
-      )}
-
       <section className="relative border-b border-border/60 bg-surface-muted/40 overflow-hidden">
         <EngineeringBg variant="grid" className="absolute inset-0 opacity-40 dark:opacity-20" />
         <div className="container-page py-16 relative z-10">
@@ -289,14 +279,7 @@ function Counselling() {
                   </div>
                 </div>
 
-                <Button onClick={() => {
-                  if (genRank === "8081" && community === "BC" && commRank === "4702" && gender === "Male" && parseFloat(cutoff) === 188.5) {
-                    setShowEasterEgg(true);
-                  } else {
-                    setShowEasterEgg(false);
-                  }
-                  generate();
-                }} disabled={loading} className="w-full h-12 rounded-xl gap-2 font-bold shadow-glow relative overflow-hidden group">
+                <Button onClick={() => generate()} disabled={loading} className="w-full h-12 rounded-xl gap-2 font-bold shadow-glow relative overflow-hidden group">
                   <div className="absolute inset-0 bg-white/20 translate-y-[100%] group-hover:translate-y-0 transition-transform duration-300" />
                   {loading ? <Loader2 className="size-4 animate-spin relative z-10" /> : <Activity className="size-4 relative z-10" />}
                   <span className="relative z-10 tracking-wide uppercase text-xs">{loading ? "Finding Colleges..." : "Find Colleges"}</span>

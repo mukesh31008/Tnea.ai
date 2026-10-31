@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
+import { createAiProvider } from "@/lib/ai-gateway.server";
 import { generateObject } from "ai";
 import { z } from "zod";
 
@@ -16,15 +16,32 @@ const schema = z.object({
   reasonings: z.record(z.string(), z.string()),
 });
 
+function generateFallbackReasonings(picks: Pick[]) {
+  const reasonings: Record<string, string> = {};
+  for (const p of picks) {
+    const key = `${p.code}-${p.branch}`;
+    reasonings[key] = p.probability >= 70
+      ? `Strong safe option — your cutoff comfortably exceeds the typical ${p.expectedCutoff.toFixed(1)} closing mark.`
+      : p.probability >= 35
+      ? `Realistic target — your cutoff is close to the expected closing mark of ${p.expectedCutoff.toFixed(1)}.`
+      : `Ambitious pick — expected closing cutoff ${p.expectedCutoff.toFixed(1)} is above your current profile.`;
+  }
+  return reasonings;
+}
+
 export const Route = createFileRoute("/api/counselling")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const body = (await request.json()) as Body;
-        const key = process.env.LOVABLE_API_KEY;
-        if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
+        const key = process.env.OPENAI_API_KEY || process.env.AI_API_KEY;
 
-        const gateway = createLovableAiGatewayProvider(key, { structuredOutputs: true });
+        if (!key) {
+          const reasonings = generateFallbackReasonings(body.picks);
+          return new Response(JSON.stringify({ reasonings }), { headers: { "content-type": "application/json" } });
+        }
+
+        const ai = createAiProvider(key, { structuredOutputs: true });
 
         const prompt = `You are a TNEA counselling advisor. For each college+branch pick below, produce a ONE-sentence reasoning (max 25 words) explaining why it fits or challenges this student. Use plain English, no jargon.
 
@@ -43,24 +60,16 @@ ${body.picks.map((p) => `- ${p.code}-${p.branch}: ${p.name} · expected cutoff $
 Return JSON: { "reasonings": { "CODE-BRANCH": "one sentence", ... } }`;
 
         try {
+          const modelName = process.env.AI_MODEL || "gpt-4o-mini";
           const { object } = await generateObject({
-            model: gateway("openai/gpt-5.5"),
+            model: ai(modelName),
             schema,
             prompt,
           });
           return new Response(JSON.stringify(object), { headers: { "content-type": "application/json" } });
         } catch (e) {
           console.error("counselling AI error", e);
-          // Fallback: heuristic sentences
-          const reasonings: Record<string, string> = {};
-          for (const p of body.picks) {
-            const key = `${p.code}-${p.branch}`;
-            reasonings[key] = p.probability >= 70
-              ? `Strong safe option — your cutoff comfortably exceeds the typical ${p.expectedCutoff.toFixed(1)} closing mark.`
-              : p.probability >= 35
-              ? `Realistic target — your cutoff is close to the expected closing mark of ${p.expectedCutoff.toFixed(1)}.`
-              : `Ambitious pick — expected closing cutoff ${p.expectedCutoff.toFixed(1)} is above your current profile.`;
-          }
+          const reasonings = generateFallbackReasonings(body.picks);
           return new Response(JSON.stringify({ reasonings }), { headers: { "content-type": "application/json" } });
         }
       },
